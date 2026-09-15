@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BeamNG Web: Ultra-Realistic Soft-Body Vehicle Simulation Engine</title>
+  <meta name="description" content="Next-generation WebGL soft-body vehicle simulation with real-time mass-spring-damper physics, flexbody deformation, mechanical damage, and BeamNG-accurate driving mechanics." />
+  <link rel="stylesheet" href="/styles/ui.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- 3D WebGL Canvas Viewport -->
+  <div id="canvas-container"></div>
+  <div class="vignette-overlay"></div>
+
+  <!-- Interactive Node Grabber Crosshair Indicator -->
+  <div id="node-reticle" class="node-grabber-reticle"></div>
+
+  <!-- Telemetry Top Bar -->
+  <header class="telemetry-topbar">
+    <div class="left-stats-group">
+      <div class="hud-pill clickable" id="btn-open-vehicles" title="Change vehicle (Ctrl+E)">
+        <span class="tag">CAR</span>
+        <span id="top-car-name">Hirochi Apex NS-98</span>
+      </div>
+      <div class="hud-pill clickable" id="btn-open-maps" title="Change map">
+        <span class="tag">MAP</span>
+        <span id="top-map-name">Proving Grounds & Crusher</span>
+      </div>
+      <div class="hud-pill clickable" id="btn-cycle-camera" title="Cycle camera view (C / 1-7)">
+        <span class="tag">CAM</span>
+        <span id="top-cam-name">Chase Cam</span>
+      </div>
+    </div>
+
+    <div class="center-stats-group">
+      <div class="hud-pill" id="slowmo-pill" title="Slow Motion (Alt + Up/Down)">
+        <span class="tag">TIME</span>
+        <span id="slowmo-text">1.0x Realtime</span>
+      </div>
+      <div class="hud-pill" id="sim-state-pill" title="Simulation state (J)">
+        <span class="tag">SIM</span>
+        <span id="sim-state-text">Running</span>
+      </div>
+    </div>
+
+    <div class="right-stats-group">
+      <div class="hud-pill" id="substep-pill" title="Physics sub-stepping frequency">
+        <span class="tag">SOLVER</span>
+        <span id="substep-val">1000 Hz (16 steps)</span>
+      </div>
+      <div class="hud-pill" id="fps-pill">
+        <span class="tag">FPS</span>
+        <span id="fps-val">60</span>
+      </div>
+      <div class="hud-pill clickable" id="btn-toggle-skeleton" title="Toggle Soft-Body Skeleton (Ctrl+B)">
+        <span class="tag">SKELETON</span>
+        <span id="skeleton-status">OFF</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Damage Schematic App (BeamNG Live Vehicle Damage Overlay) -->
+  <aside class="damage-app" id="damage-app">
+    <div class="damage-header">
+      <span>Vehicle Structural Health</span>
+      <span id="overall-damage-pct" style="color: var(--accent-green); font-family: var(--font-mono);">100%</span>
+    </div>
+    <div class="damage-container">
+      <!-- Dynamic SVG Car Silhouette -->
+      <svg class="car-silhouette-svg" viewBox="0 0 100 180">
+        <!-- Chassis Outline -->
+        <rect id="dmg-chassis" x="20" y="15" width="60" height="150" rx="14" fill="#1e293b" stroke="#475569" stroke-width="2" />
+        <!-- Front Bumper -->
+        <path id="dmg-bumper-f" d="M 18 25 Q 50 10 82 25 L 82 32 Q 50 20 18 32 Z" fill="#22c55e" stroke="#15803d" stroke-width="1.5" />
+        <!-- Engine & Radiator Bay -->
+        <rect id="dmg-engine" x="32" y="36" width="36" height="28" rx="4" fill="#22c55e" stroke="#15803d" stroke-width="1.5" />
+        <!-- Front Suspension & Wheels -->
+        <rect id="dmg-wheel-fl" x="6" y="32" width="12" height="24" rx="3" fill="#22c55e" />
+        <rect id="dmg-wheel-fr" x="82" y="32" width="12" height="24" rx="3" fill="#22c55e" />
+        <!-- Cabin / Roof / Windshield -->
+        <path id="dmg-cabin" d="M 24 68 L 76 68 L 72 120 L 28 120 Z" fill="#334155" stroke="#475569" stroke-width="1.5" />
+        <!-- Doors -->
+        <rect id="dmg-door-l" x="18" y="70" width="8" height="48" rx="2" fill="#22c55e" />
+        <rect id="dmg-door-r" x="74" y="70" width="8" height="48" rx="2" fill="#22c55e" />
+        <!-- Rear Suspension & Wheels -->
+        <rect id="dmg-wheel-rl" x="6" y="124" width="12" height="24" rx="3" fill="#22c55e" />
+        <rect id="dmg-wheel-rr" x="82" y="124" width="12" height="24" rx="3" fill="#22c55e" />
+        <!-- Rear Bumper & Trunk -->
+        <path id="dmg-bumper-r" d="M 18 155 Q 50 168 82 155 L 82 148 Q 50 158 18 148 Z" fill="#22c55e" stroke="#15803d" stroke-width="1.5" />
+      </svg>
+
+      <div class="damage-stats-list">
+        <div class="stat-row">
+          <span class="stat-label">Engine:</span>
+          <span class="stat-val" id="stat-engine-health">100%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Radiator:</span>
+          <span class="stat-val" id="stat-rad-status">OK</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Suspension:</span>
+          <span class="stat-val" id="stat-susp-health">100%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Tire Press:</span>
+          <span class="stat-val" id="stat-tire-press">32.0 PSI</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Frame Yield:</span>
+          <span class="stat-val" id="stat-frame-strain">0.0%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Broken Beams:</span>
+          <span class="stat-val" id="stat-broken-beams">0</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Cluster HUD (Bottom Right) -->
+  <section class="cluster-hud">
+    <div class="dial-and-gauges">
+      <!-- Supplementary Gauges -->
+      <div class="aux-gauges">
+        <div class="gauge-bar-wrapper">
+          <div class="gauge-bar-header">
+            <span>BOOST</span>
+            <span id="boost-readout">0.0 PSI</span>
+          </div>
+          <div class="gauge-bar-bg">
+            <div class="gauge-bar-fill" id="boost-fill"></div>
+          </div>
+        </div>
+        <div class="gauge-bar-wrapper">
+          <div class="gauge-bar-header">
+            <span>TEMP</span>
+            <span id="temp-readout">90°C</span>
+          </div>
+          <div class="gauge-bar-bg">
+            <div class="gauge-bar-fill" id="temp-fill" style="width: 45%;"></div>
+          </div>
+        </div>
+        <div class="gauge-bar-wrapper">
+          <div class="gauge-bar-header">
+            <span>G-FORCE</span>
+            <span id="gforce-readout">0.00 G</span>
+          </div>
+          <div class="gauge-bar-bg">
+            <div class="gauge-bar-fill" id="gforce-fill"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Tachometer / Speedometer Dial -->
+      <div class="main-dial-wrapper">
+        <canvas id="tacho-canvas" width="230" height="230"></canvas>
+        <div class="dial-center-info">
+          <div class="speed-readout" id="speed-val">0</div>
+          <div class="speed-unit" id="speed-unit">MPH</div>
+          <div class="gear-display" id="gear-val">N</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Powertrain Status Row -->
+    <div class="powertrain-bar">
+      <div class="badge-item active-cyan" id="badge-esc">ESC</div>
+      <div class="badge-item" id="badge-tcs">TCS</div>
+      <div class="badge-item" id="badge-abs">ABS</div>
+      <div class="badge-item active" id="badge-handbrake">P-BRAKE</div>
+      <div class="badge-item" id="badge-diff">DIFF-LOCK</div>
+      <div class="badge-item active-cyan" id="badge-drive-mode">RWD</div>
+      <div class="badge-item" id="badge-lights">LIGHTS</div>
+      <div class="badge-item" id="badge-hazard">HAZARDS</div>
+      <div class="badge-item" id="badge-horn">HORN</div>
+    </div>
+  </section>
+
+  <!-- Controls Quick Action Buttons & Help (Bottom Left) -->
+  <section class="controls-bottom-bar">
+    <div class="quick-actions-row">
+      <button class="action-btn" id="btn-respawn" title="Reset vehicle (R)">
+        <kbd>R</kbd> Reset Vehicle
+      </button>
+      <button class="action-btn" id="btn-recover" title="Recover vehicle (Insert)">
+        <kbd>Ins</kbd> Recover
+      </button>
+      <button class="action-btn" id="btn-spawn-beside-quick" title="Spawn another vehicle (+3.5m) for crash test">
+        <kbd>+Car</kbd> Spawn Beside
+      </button>
+      <button class="action-btn" id="btn-switch-car" title="Switch between active vehicles (Tab)">
+        <kbd>Tab</kbd> Switch
+      </button>
+      <button class="action-btn" id="btn-toggle-controls" title="Toggle Controls Guide">
+        <kbd>?</kbd> Controls
+      </button>
+      <button class="action-btn" id="btn-open-pause" title="Pause / Menu (Esc)">
+        <kbd>ESC</kbd> Menu
+      </button>
+    </div>
+
+    <!-- Collapsible Controls Guide -->
+    <div class="controls-drawer" id="controls-drawer" style="display: none;">
+      <div class="control-item"><span>Throttle / Steer</span> <kbd>W/A/S/D</kbd> or <kbd>Arrows</kbd></div>
+      <div class="control-item"><span>Handbrake</span> <kbd>Space</kbd> / <kbd>P</kbd></div>
+      <div class="control-item"><span>Gear Shift Up / Down</span> <kbd>X</kbd> / <kbd>Z</kbd></div>
+      <div class="control-item"><span>Gearbox Mode</span> <kbd>Q</kbd></div>
+      <div class="control-item"><span>Node Grabber</span> <kbd>Ctrl + Drag</kbd></div>
+      <div class="control-item"><span>Reset / Recover</span> <kbd>R</kbd> / <kbd>Insert</kbd></div>
+      <div class="control-item"><span>Slow-Mo Dilation</span> <kbd>Alt + Up/Dn</kbd></div>
+      <div class="control-item"><span>Switch Vehicle</span> <kbd>Tab</kbd></div>
+      <div class="control-item"><span>Free Camera</span> <kbd>Shift + C</kbd></div>
+      <div class="control-item"><span>Teleport to Cam</span> <kbd>F7</kbd></div>
+      <div class="control-item"><span>Headlights / Horn</span> <kbd>N</kbd> / <kbd>H</kbd></div>
+      <div class="control-item"><span>Diff Lock / 4WD</span> <kbd>Alt+D</kbd> / <kbd>Alt+S</kbd></div>
+    </div>
+  </section>
+
+  <!-- MODALS -->
+
+  <!-- ESC Pause Menu Modal -->
+  <div class="modal-backdrop" id="pause-modal">
+    <div class="modal-card pause-menu-card">
+      <div class="modal-body">
+        <h2 class="pause-title">Simulation Paused</h2>
+        <div class="pause-menu-list">
+          <button class="menu-item-btn" id="menu-resume">
+            <span>Resume Simulation</span>
+            <kbd>ESC</kbd>
+          </button>
+          <button class="menu-item-btn" id="menu-open-vehicles">
+            <span>Vehicle Selector</span>
+            <kbd>Ctrl + E</kbd>
+          </button>
+          <button class="menu-item-btn" id="menu-open-parts">
+            <span>Parts & Tuning</span>
+            <kbd>Ctrl + W</kbd>
+          </button>
+          <button class="menu-item-btn" id="menu-open-maps">
+            <span>Select Environment Map</span>
+            <span>5 Maps</span>
+          </button>
+          <button class="menu-item-btn" id="menu-open-settings">
+            <span>Graphics & Physics Settings</span>
+            <span>Presets</span>
+          </button>
+          <button class="menu-item-btn" id="menu-reset-car">
+            <span>Reset Active Vehicle</span>
+            <kbd>R</kbd>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vehicle Selector Modal (Ctrl + E) -->
+  <div class="modal-backdrop" id="vehicle-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Vehicle Roster & Specifications</h3>
+        <button class="modal-close-btn" id="close-vehicle-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="vehicle-grid" id="vehicle-grid-container">
+          <!-- Dynamically populated 10 vehicles -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parts & Tuning Selector Modal (Ctrl + W) -->
+  <div class="modal-backdrop" id="parts-modal">
+    <div class="modal-card" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Vehicle Parts & Performance Tuning</h3>
+        <button class="modal-close-btn" id="close-parts-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-group">
+          <div class="settings-group-title">Powertrain & Forced Induction</div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label">Engine Tuning Stage</div>
+              <div class="settings-desc">Adjusts horsepower, torque curve, and rev limiter</div>
+            </div>
+            <select class="settings-select" id="tune-engine-stage">
+              <option value="factory">Factory Spec (Stock)</option>
+              <option value="sport">Sport ECU (+50 hp)</option>
+              <option value="turbo">Twin-Turbo Race (+180 hp)</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label">Differential Configuration</div>
+              <div class="settings-desc">Differential locking ratio and slip limit</div>
+            </div>
+            <select class="settings-select" id="tune-diff-mode">
+              <option value="open">Open Differential</option>
+              <option value="lsd" selected>Limited Slip Differential (LSD)</option>
+              <option value="locked">Spool / 100% Locked</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Suspension & Chassis</div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label">Suspension Stiffness & Damping</div>
+              <div class="settings-desc">Spring stiffness (k) and shock dissipation (c)</div>
+            </div>
+            <select class="settings-select" id="tune-suspension">
+              <option value="comfort">Street Comfort</option>
+              <option value="sport" selected>Sport Stiff</option>
+              <option value="track">Track Spec Coilovers</option>
+              <option value="offroad">Off-Road Long Travel</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label">Tire Compound</div>
+              <div class="settings-desc">Cornering grip coefficient and slip threshold</div>
+            </div>
+            <select class="settings-select" id="tune-tires">
+              <option value="street">Standard All-Season</option>
+              <option value="sport" selected>Ultra-High Performance (Semi-Slick)</option>
+              <option value="rally">Gravel & Mud Rally Tires</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Environment Map Selector Modal -->
+  <div class="modal-backdrop" id="map-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Select Simulation Environment</h3>
+        <button class="modal-close-btn" id="close-map-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="env-grid" id="env-grid-container">
+          <!-- Dynamically populated 5 maps -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Graphics & Physics Settings Modal -->
+  <div class="modal-backdrop" id="settings-modal">
+    <div class="modal-card" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Graphics & Physics Engine Settings</h3>
+        <button class="modal-close-btn" id="close-settings-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-group">
+          <div class="settings-group-title">Performance Preset</div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label">Graphics & Physics Preset</div>
+              <div class="settings-desc">Fast configuration for 60+ FPS zero-lag gameplay</div>
+            </div>
+            <select class="settings-select" id="setting-preset">
+              <option value="low">Low (500Hz Physics, Fast)</option>
+              <option value="medium">Medium (1000Hz Physics, Balanced)</option>
+              <option value="high" selected>High (1000Hz Physics, PBR, Bloom)</option>
+              <option value="ultra">Ultra (2000Hz Physics, 4K Shadows, Dual-Threaded)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Soft-Body Physics Parameters</div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label">Sub-stepping Frequency</div>
+              <div class="settings-desc">Higher frequencies eliminate tunneling on high-speed impacts</div>
+            </div>
+            <select class="settings-select" id="setting-substep">
+              <option value="500">500 Hz (8 steps/frame)</option>
+              <option value="1000" selected>1000 Hz (16 steps/frame)</option>
+              <option value="2000">2000 Hz (32 steps/frame)</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label">Plastic Deformation & Beam Snapping</div>
+              <div class="settings-desc">Enables permanent chassis warping and panel detachment</div>
+            </div>
+            <select class="settings-select" id="setting-deformation">
+              <option value="true" selected>Enabled (Full Damage)</option>
+              <option value="false">Disabled (Rigid Mode)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">Visuals & Rendering</div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label">Shadow Quality</div>
+              <div class="settings-desc">Directional shadow map resolution</div>
+            </div>
+            <select class="settings-select" id="setting-shadows">
+              <option value="off">Disabled</option>
+              <option value="1024">1024x1024 Medium</option>
+              <option value="2048" selected>2048x2048 High</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div>
+              <div class="settings-label">Screen Space Reflections & Mirror Shaders</div>
+              <div class="settings-desc">Planar dynamic mirror reflections</div>
+            </div>
+            <select class="settings-select" id="setting-reflections">
+              <option value="off">Off</option>
+              <option value="on" selected>On (512x512 Capped)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div class="notification-toast" id="notification-toast">
+    Vehicle reset to home position
+  </div>
+
+  <!-- Main ES Module Script -->
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
